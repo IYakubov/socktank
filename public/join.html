@@ -81,7 +81,7 @@
       if (code.length !== 6) { errEl.textContent = 'Please enter all 6 digits.'; return; }
       statusEl.textContent = 'Connecting…';
 
-      const const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       ws = new WebSocket(wsProto + '//' + location.host);
       ws.onopen = () => ws.send(JSON.stringify({ type: 'claim_slot', code }));
       ws.onmessage = (e) => {
