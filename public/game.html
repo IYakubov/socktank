@@ -202,6 +202,42 @@
   let wallEls  = [];
   let ws;
 
+  // ── Client-side bullet prediction ─────────────────────────────────────────
+  // Bullets are tracked locally and moved every animation frame
+  // so they stay visible regardless of server tick latency
+  const BULLET_SPEED = 20; // must match server
+  const toRad = deg => deg * Math.PI / 180;
+  let localBullets = {}; // id -> { x, y, angle, owner, wallHit }
+  let lastRenderTime = 0;
+
+  function renderLoop(now) {
+    requestAnimationFrame(renderLoop);
+    const dt = Math.min((now - lastRenderTime) / (1000 / 60), 4); // max 4 ticks catchup
+    lastRenderTime = now;
+
+    // Move each bullet forward locally
+    Object.values(localBullets).forEach(b => {
+      const rad = toRad(b.angle);
+      b.x += Math.cos(rad) * BULLET_SPEED * dt;
+      b.y += Math.sin(rad) * BULLET_SPEED * dt;
+
+      // Update or create DOM element
+      let el = bulletEls[b.id];
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'bullet';
+        const img = document.createElement('img');
+        img.src = '/svg/' + b.owner + 'BULLET.svg';
+        el.appendChild(img);
+        canvas.appendChild(el);
+        bulletEls[b.id] = el;
+      }
+      el.style.left = Math.round(b.x) + 'px';
+      el.style.top  = Math.round(b.y) + 'px';
+    });
+  }
+  requestAnimationFrame(t => { lastRenderTime = t; requestAnimationFrame(renderLoop); });
+
   // Sound pools
   const hitPool     = Array.from({length: 6}, () => new Audio('/hit.wav'));
   const shotPool    = Array.from({length: 6}, () => new Audio('/shot.wav'));
@@ -298,6 +334,7 @@
       // Clear old bullets
       Object.values(bulletEls).forEach(el => el.remove());
       bulletEls = {};
+      localBullets = {};
       setTimeout(() => cdOverlay.style.display = 'none', 700);
     }
 
@@ -323,33 +360,30 @@
         if (fillEl) fillEl.style.width = (t.hits / 10 * 100) + '%';
       });
 
-      // Update bullets — reconcile with current set
+      // Sync localBullets with server state
       const liveBulletIds = new Set(msg.bullets.map(b => b.id));
-      // Play shot sound for each newly appearing bullet
-      msg.bullets.forEach(b => { if (!bulletEls[b.id]) playShot(); });
 
-      // Remove dead bullets
-      Object.keys(bulletEls).forEach(id => {
+      // Remove bullets the server says are gone
+      Object.keys(localBullets).forEach(id => {
         if (!liveBulletIds.has(parseInt(id))) {
-          bulletEls[id].remove();
-          delete bulletEls[id];
+          delete localBullets[id];
+          if (bulletEls[id]) { bulletEls[id].remove(); delete bulletEls[id]; }
         }
       });
 
-      // Add / update live bullets
+      // Add new bullets / correct existing positions from server
       msg.bullets.forEach(b => {
-        let el = bulletEls[b.id];
-        if (!el) {
-          el = document.createElement('div');
-          el.className = 'bullet';
-          const img = document.createElement('img');
-          img.src = '/svg/' + b.owner + 'BULLET.svg';
-          el.appendChild(img);
-          canvas.appendChild(el);
-          bulletEls[b.id] = el;
+        const isNew = !localBullets[b.id];
+        if (isNew) {
+          // Brand new bullet — spawn immediately at server position
+          localBullets[b.id] = { id: b.id, owner: b.owner, x: b.x, y: b.y, angle: b.angle || 0 };
+          playShot();
+        } else {
+          // Correct position to server authoritative value (gentle snap)
+          localBullets[b.id].x = b.x;
+          localBullets[b.id].y = b.y;
+          if (b.angle !== undefined) localBullets[b.id].angle = b.angle;
         }
-        el.style.left = b.x + 'px';
-        el.style.top  = b.y + 'px';
         if (b.wallHit) playWallHit();
       });
 

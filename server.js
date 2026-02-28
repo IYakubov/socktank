@@ -22,9 +22,9 @@ const GAME_H    = 1080;
 const TANK_W    = 173;
 const TANK_H    = 94;
 const BULLET_R  = 7;   // radius
-const TANK_SPEED    = 2;
-const TURN_SPEED    = 1;  // degrees per tick
-const BULLET_SPEED  = 20;
+const TANK_SPEED    = 4;
+const TURN_SPEED    = 3;  // degrees per tick
+const BULLET_SPEED  = 10;
 const RELOAD_TIME   = 5000; // ms
 const HIT_FLASH     = 400;  // ms
 const MAX_HITS      = 10;
@@ -486,6 +486,7 @@ function startGame(room) {
     const bulletState = bullets.map(b => ({
       id: b.id, owner: b.owner,
       x: Math.round(b.x), y: Math.round(b.y),
+      angle: b.angle,
       wallHit: b.wallHit || false,
     }));
     // Reset wallHit flags after broadcasting
