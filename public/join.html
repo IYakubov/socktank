@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SockTank - Join</title>
+  <style>
+    @font-face {
+      font-family: 'Unbounded';
+      src: url('/fonts/Unbounded-VariableFont_wght.ttf') format('truetype');
+      font-weight: 100 900;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; min-height: 100vh;
+      background: #F3EFD4;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: clamp(20px, 5vw, 48px);
+      font-family: 'Unbounded', sans-serif;
+      padding: 24px;
+    }
+    h2 { font-size: clamp(16px, 4.5vw, 32px); color: #1a1a1a; text-align: center; }
+    .code-row { display: flex; gap: clamp(6px, 2vw, 14px); }
+    .code-box {
+      width: clamp(38px, 11vw, 62px);
+      height: clamp(50px, 14vw, 80px);
+      background: #1a1a1a; border: none; border-radius: 6px;
+      color: #fff; font-size: clamp(22px, 6vw, 42px);
+      text-align: center; font-family: 'Unbounded', sans-serif;
+      font-weight: 700; outline: none; caret-color: transparent;
+    }
+    .code-box:focus { background: #2e2e2e; box-shadow: 0 0 0 3px #782F2F; }
+    .btn {
+      background: none; border: none; cursor: pointer; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s;
+    }
+    .btn:active { transform: scale(0.95); }
+    .btn img { width: clamp(180px, 50vw, 320px); height: auto; }
+    #error-msg  { color: #782F2F; font-size: clamp(12px, 3vw, 20px); min-height: 1.4em; text-align: center; }
+    #status-msg { color: #1a1a1a; font-size: clamp(12px, 3vw, 20px); min-height: 1.4em; text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>Enter the Code to Join</h2>
+  <div class="code-row">
+    <input class="code-box" maxlength="1" inputmode="numeric">
+    <input class="code-box" maxlength="1" inputmode="numeric">
+    <input class="code-box" maxlength="1" inputmode="numeric">
+    <input class="code-box" maxlength="1" inputmode="numeric">
+    <input class="code-box" maxlength="1" inputmode="numeric">
+    <input class="code-box" maxlength="1" inputmode="numeric">
+  </div>
+  <div id="error-msg"></div>
+  <div id="status-msg"></div>
+  <button class="btn" onclick="joinGame()">
+    <img src="/svg/joingame.svg" alt="Join Game">
+  </button>
+
+  <script>
+    const boxes = Array.from(document.querySelectorAll('.code-box'));
+    boxes.forEach((box, i) => {
+      box.addEventListener('input', () => {
+        box.value = box.value.replace(/\D/g, '').slice(-1);
+        if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+      });
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !box.value && i > 0) {
+          boxes[i - 1].focus(); boxes[i - 1].value = '';
+        }
+      });
+    });
+    boxes[0].focus();
+
+    function joinGame() {
+      const code = boxes.map(b => b.value).join('');
+      const errEl = document.getElementById('error-msg');
+      const statusEl = document.getElementById('status-msg');
+      errEl.textContent = '';
+      if (code.length !== 6) { errEl.textContent = 'Please enter all 6 digits.'; return; }
+      statusEl.textContent = 'Connecting…';
+
+      const const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(wsProto + '//' + location.host);
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'claim_slot', code }));
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'slot_claimed') {
+          statusEl.textContent = 'You are Tank ' + msg.player + '! Opening joystick…';
+          setTimeout(() => { ws.close(); location.href = '/joystick?player=' + msg.player + '&code=' + code; }, 300);
+        }
+        if (msg.type === 'error') { errEl.textContent = msg.message; statusEl.textContent = ''; ws.close(); }
+      };
+      ws.onerror = () => { errEl.textContent = 'Connection failed.'; };
+    }
+  </script>
+</body>
+</html>

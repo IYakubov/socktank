@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SockTank</title>
+  <style>
+    @font-face {
+      font-family: 'Unbounded';
+      src: url('/fonts/Unbounded-VariableFont_wght.ttf') format('truetype');
+      font-weight: 100 900;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #F3EFD4;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: clamp(24px, 5vw, 60px);
+      font-family: 'Unbounded', sans-serif;
+      overflow: hidden;
+    }
+    h1 {
+      font-size: clamp(40px, 7vw, 100px);
+      color: #1a1a1a;
+      letter-spacing: 4px;
+      text-align: center;
+    }
+    .buttons {
+      display: flex; flex-direction: column;
+      align-items: center; gap: clamp(16px, 3vw, 36px);
+    }
+    .btn {
+      background: none; border: none; cursor: pointer; padding: 0;
+      transition: transform 0.1s, filter 0.1s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn:hover  { transform: scale(1.05); filter: brightness(0.9); }
+    .btn:active { transform: scale(0.97); }
+    .btn img { display: block; width: clamp(200px, 28vw, 420px); height: auto; }
+  </style>
+</head>
+<body>
+  <h1>SockTank</h1>
+  <div class="buttons">
+    <button class="btn" onclick="location.href='/create'">
+      <img src="/svg/creategame.svg" alt="Create Game">
+    </button>
+    <button class="btn" onclick="location.href='/join'">
+      <img src="/svg/joingame.svg" alt="Join Game">
+    </button>
+  </div>
+</body>
+</html>

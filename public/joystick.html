@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SockTank - Joystick</title>
+  <style>
+    @font-face {
+      font-family: 'Unbounded';
+      src: url('/fonts/Unbounded-VariableFont_wght.ttf') format('truetype');
+      font-weight: 100 900;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #F3EFD4;
+      display: flex; flex-direction: column;
+      align-items: center; overflow: hidden;
+      user-select: none; -webkit-user-select: none;
+      touch-action: none;
+      font-family: 'Unbounded', sans-serif;
+    }
+
+    /* Top bar */
+    #top-bar {
+      width: 100%; max-width: 500px;
+      height: clamp(56px, 12vw, 90px);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    #top-bar img { height: 75%; width: auto; }
+
+    /* D-pad area */
+    #dpad {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* D-pad cross grid */
+    .dpad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: clamp(4px, 1.5vw, 10px);
+      width: min(90vw, 90vh * 0.75);
+      aspect-ratio: 1;
+    }
+
+    .dpad-btn {
+      background: #E07B3A;
+      border: none; border-radius: clamp(6px, 1.5vw, 14px);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: filter 0.05s;
+    }
+    .dpad-btn img {
+      width: 55%; height: 55%; object-fit: contain;
+      pointer-events: none;
+    }
+    .dpad-btn.pressed { filter: brightness(0.7); }
+    .dpad-empty { background: transparent; pointer-events: none; }
+
+    /* Shoot button takes center cell */
+    #btn-shoot { background: #E07B3A; }
+
+    #status {
+      font-size: clamp(11px, 2.5vw, 16px);
+      color: #888; padding: 8px; text-align: center; flex-shrink: 0;
+    }
+    #eliminated-msg {
+      display: none; position: fixed; inset: 0;
+      background: rgba(243,239,212,0.93);
+      flex-direction: column; align-items: center; justify-content: center;
+      font-size: clamp(20px, 6vw, 48px); color: #782F2F;
+      font-weight: 700; text-align: center; padding: 24px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="top-bar">
+    <img id="player-label" src="" alt="Player">
+  </div>
+
+  <div id="dpad">
+    <div class="dpad-grid">
+      <!-- Row 1 -->
+      <div class="dpad-empty"></div>
+      <button class="dpad-btn" id="btn-forward">
+        <img src="/svg/FORWARD.svg" alt="Forward">
+      </button>
+      <div class="dpad-empty"></div>
+
+      <!-- Row 2 -->
+      <button class="dpad-btn" id="btn-left">
+        <img src="/svg/LEFT.svg" alt="Left">
+      </button>
+      <button class="dpad-btn" id="btn-shoot">
+        <img src="/svg/SHOOT.svg" alt="Shoot">
+      </button>
+      <button class="dpad-btn" id="btn-right">
+        <img src="/svg/RIGHT.svg" alt="Right">
+      </button>
+
+      <!-- Row 3 -->
+      <div class="dpad-empty"></div>
+      <button class="dpad-btn" id="btn-backward">
+        <img src="/svg/BACKWARDS.svg" alt="Backward">
+      </button>
+      <div class="dpad-empty"></div>
+    </div>
+  </div>
+
+  <div id="status">Connecting…</div>
+  <div id="eliminated-msg">💥 You've been<br>eliminated!<br><span style="font-size:0.6em;color:#555">Watching…</span></div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const player = params.get('player') || 'A';
+    const code   = params.get('code');
+
+    // Player label SVG
+    document.getElementById('player-label').src = '/svg/PLAYER' + player + '.svg';
+
+    // Input state
+    const input = { forward: false, backward: false, left: false, right: false, shoot: false };
+    const btnMap = {
+      'btn-forward':  'forward',
+      'btn-backward': 'backward',
+      'btn-left':     'left',
+      'btn-right':    'right',
+      'btn-shoot':    'shoot',
+    };
+
+    let ws;
+    let sendInterval = null;
+    let lastInputStr = '';
+
+    function connect() {
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(wsProto + '//' + location.host);
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'attach', code, player }));
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'attached' || msg.type === 'game_start') {
+          document.getElementById('status').textContent = 'Connected ✓';
+          setTimeout(() => document.getElementById('status').style.opacity = '0', 2000);
+          startSendLoop();
+        }
+        if (msg.type === 'game_over') {
+          document.getElementById('status').style.opacity = '1';
+          document.getElementById('status').textContent = 'Game Over';
+        }
+        if (msg.type === 'eliminated') {
+          document.getElementById('eliminated-msg').style.display = 'flex';
+          stopSendLoop();
+        }
+        if (msg.type === 'revived') {
+          document.getElementById('eliminated-msg').style.display = 'none';
+          document.getElementById('status').style.opacity = '0';
+          startSendLoop();
+        }
+        if (msg.type === 'room_expired') {
+          document.getElementById('status').style.opacity = '1';
+          document.getElementById('status').textContent = 'Room expired — 15 min inactivity';
+        }
+        if (msg.type === 'player_disconnected') {
+          document.getElementById('status').style.opacity = '1';
+          document.getElementById('status').textContent = 'Someone disconnected';
+        }
+      };
+      ws.onclose = () => {
+        document.getElementById('status').style.opacity = '1';
+        document.getElementById('status').textContent = 'Disconnected';
+        stopSendLoop();
+      };
+    }
+
+    function startSendLoop() {
+      if (sendInterval) return;
+      sendInterval = setInterval(() => {
+        const str = JSON.stringify(input);
+        if (str !== lastInputStr) {
+          if (ws && ws.readyState === WebSocket.OPEN)
+            ws.send(JSON.stringify({ type: 'tank_input', input }));
+          lastInputStr = str;
+        }
+      }, 33); // ~30fps input
+    }
+
+    function stopSendLoop() {
+      clearInterval(sendInterval); sendInterval = null;
+    }
+
+    // Button press/release handlers
+    Object.entries(btnMap).forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      function press(e) {
+        e.preventDefault();
+        input[key] = true;
+        el.classList.add('pressed');
+        // Shoot is one-shot: clear after brief moment
+        if (key === 'shoot') {
+          setTimeout(() => { input[key] = false; }, 120);
+        }
+      }
+      function release(e) {
+        e.preventDefault();
+        if (key !== 'shoot') input[key] = false;
+        el.classList.remove('pressed');
+      }
+      el.addEventListener('touchstart',  press,   { passive: false });
+      el.addEventListener('touchend',    release, { passive: false });
+      el.addEventListener('touchcancel', release, { passive: false });
+      el.addEventListener('mousedown',   press);
+      el.addEventListener('mouseup',     release);
+      el.addEventListener('mouseleave',  release);
+    });
+
+    connect();
+  </script>
+</body>
+</html>

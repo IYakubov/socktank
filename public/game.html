@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SockTank</title>
+  <style>
+    @font-face {
+      font-family: 'Unbounded';
+      src: url('/fonts/Unbounded-VariableFont_wght.ttf') format('truetype');
+      font-weight: 100 900;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #1a1a1a;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; font-family: 'Unbounded', sans-serif;
+    }
+
+    #canvas {
+      width: 1920px; height: 1080px;
+      background: #F3EFD4;
+      position: relative;
+      transform-origin: center center;
+      overflow: hidden;
+    }
+
+    /* Scoreboard */
+    #scoreboard {
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 80px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 60px; z-index: 10;
+      background: rgba(243,239,212,0.85);
+      border-bottom: 3px solid #1a1a1a;
+    }
+    .score-block {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .score-label {
+      font-size: 22px; font-weight: 700; color: #1a1a1a;
+    }
+    .score-val {
+      font-size: 36px; font-weight: 700; color: #1a1a1a;
+      min-width: 44px; text-align: center;
+    }
+    .score-bar {
+      width: 120px; height: 14px;
+      background: #ccc; border-radius: 7px; overflow: hidden;
+    }
+    .score-fill {
+      height: 100%; border-radius: 7px;
+      transition: width 0.2s;
+    }
+    /* Tank colors for score bars */
+    .fill-A { background: #854646; }
+    .fill-B { background: #103430; }
+    .fill-C { background: #8B4ACF; }
+    .fill-D { background: #2A6B8A; }
+
+    /* Walls */
+    .wall {
+      position: absolute;
+      background: #1a1a1a;
+    }
+
+    /* Tanks */
+    .tank {
+      position: absolute;
+      width: 173px; height: 94px;
+      transform-origin: center center;
+      transition: none;
+    }
+    .tank img {
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* Bullets */
+    .bullet {
+      position: absolute;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .bullet img { width: 100%; height: 100%; }
+
+    /* Countdown overlay */
+    #countdown-overlay {
+      position: absolute; inset: 0;
+      background: rgba(243,239,212,0.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #countdown-number {
+      font-size: 320px; font-weight: 700; color: #1a1a1a; line-height: 1;
+    }
+
+    /* Winner overlay */
+    #winner-overlay {
+      position: absolute; inset: 0;
+      background: rgba(243,239,212,0.93);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 50px; z-index: 30;
+    }
+    #winner-text {
+      font-size: 80px; font-weight: 700; color: #1a1a1a; text-align: center;
+    }
+    #winner-sub {
+      font-size: 36px; color: #555; text-align: center;
+    }
+    .overlay-btns { display: flex; gap: 60px; align-items: center; }
+    .svgbtn {
+      background: none; border: none; cursor: pointer; padding: 0;
+      transition: transform 0.1s;
+    }
+    .svgbtn:hover  { transform: scale(1.05); }
+    .svgbtn:active { transform: scale(0.97); }
+    .svgbtn img { display: block; width: 280px; height: auto; }
+
+    /* Disconnected overlay */
+    #disc-overlay {
+      position: absolute; inset: 0;
+      background: rgba(243,239,212,0.88);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 25;
+    }
+    #disc-msg { font-size: 52px; color: #782F2F; text-align: center; padding: 40px; }
+  </style>
+</head>
+<body>
+<div id="canvas">
+
+  <!-- Scoreboard -->
+  <div id="scoreboard"></div>
+
+  <!-- Game field (walls + tanks + bullets rendered here by JS) -->
+
+  <!-- Countdown -->
+  <div id="countdown-overlay">
+    <div id="countdown-number">7</div>
+  </div>
+
+  <!-- Winner -->
+  <div id="winner-overlay">
+    <img id="winner-img" src="" alt="Winner" style="max-width:1100px;max-height:500px;width:auto;height:auto;display:none;">
+    <div id="winner-text" style="display:none;">🏆 WINNER</div>
+    <div id="winner-sub"></div>
+    <div class="overlay-btns">
+      <button class="svgbtn" onclick="restartGame()">
+        <img src="/svg/restart.svg" alt="Restart">
+      </button>
+      <button class="svgbtn" onclick="goHome()">
+        <img src="/svg/creategame.svg" alt="New Game">
+      </button>
+    </div>
+  </div>
+
+  <!-- Disconnected -->
+  <div id="disc-overlay">
+    <div id="disc-msg">A player disconnected</div>
+  </div>
+
+</div>
+
+<script>
+  // ── Scale canvas ──────────────────────────────────────────────────────────
+  const canvas = document.getElementById('canvas');
+  function scaleCanvas() {
+    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    canvas.style.transform = `scale(${scale})`;
+  }
+  scaleCanvas();
+  window.addEventListener('resize', scaleCanvas);
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const scoreboard   = document.getElementById('scoreboard');
+  const cdOverlay    = document.getElementById('countdown-overlay');
+  const cdNumber     = document.getElementById('countdown-number');
+  const winOverlay   = document.getElementById('winner-overlay');
+  const winImg       = document.getElementById('winner-img');
+  const winText      = document.getElementById('winner-text');
+  const winSub       = document.getElementById('winner-sub');
+  const discOverlay  = document.getElementById('disc-overlay');
+  const discMsg      = document.getElementById('disc-msg');
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const code   = params.get('code') || sessionStorage.getItem('code');
+  const role   = sessionStorage.getItem('role') || 'host';
+
+  const TANK_NAMES   = { A: 'ATANK', B: 'BTANK', C: 'CTANK', D: 'DTANK' };
+  const winnerSvgs   = { A: '/svg/playerawinner.svg', B: '/svg/playerbwinner.svg', C: '/svg/playercwinner.svg', D: '/svg/playerdwinner.svg' };
+  const TANK_COLORS = { A: '#854646', B: '#103430', C: '#8B4ACF', D: '#2A6B8A' };
+  let players = [];        // ['A','B',...] set on game_start
+  let tankEls  = {};       // letter -> { el, img }
+  let bulletEls = {};      // id -> el
+  let wallEls  = [];
+  let ws;
+
+  // Sound pools
+  const hitPool     = Array.from({length: 6}, () => new Audio('/hit.wav'));
+  const shotPool    = Array.from({length: 6}, () => new Audio('/shot.wav'));
+  const wallHitPool = Array.from({length: 6}, () => new Audio('/wallhit.wav'));
+  let hitIdx = 0, shotIdx = 0, wallHitIdx = 0;
+  function playHit()     { const s = hitPool[hitIdx++ % hitPool.length];         s.currentTime = 0; s.play().catch(() => {}); }
+  function playShot()    { const s = shotPool[shotIdx++ % shotPool.length];       s.currentTime = 0; s.play().catch(() => {}); }
+  function playWallHit() { const s = wallHitPool[wallHitIdx++ % wallHitPool.length]; s.currentTime = 0; s.play().catch(() => {}); }
+
+  // ── Build scoreboard ──────────────────────────────────────────────────────
+  function buildScoreboard(letters) {
+    scoreboard.innerHTML = '';
+    letters.forEach(l => {
+      const block = document.createElement('div');
+      block.className = 'score-block';
+      block.id = 'score-block-' + l;
+      block.innerHTML = `
+        <span class="score-label">${TANK_NAMES[l]}</span>
+        <div class="score-bar"><div class="score-fill fill-${l}" id="fill-${l}" style="width:0%"></div></div>
+        <span class="score-val" id="hits-${l}">0</span>
+        <span class="score-label" style="color:#999;font-size:16px">/ 10</span>
+      `;
+      scoreboard.appendChild(block);
+    });
+  }
+
+  // ── Build walls ───────────────────────────────────────────────────────────
+  function buildWalls(walls) {
+    wallEls.forEach(el => el.remove());
+    wallEls = [];
+    walls.forEach(w => {
+      const el = document.createElement('img');
+      el.src = '/svg/cube.svg';
+      el.style.cssText = `position:absolute;left:${w.x}px;top:${w.y}px;width:${w.w}px;height:${w.h}px;`;
+      canvas.appendChild(el);
+      wallEls.push(el);
+    });
+  }
+
+  // ── Build tank elements ───────────────────────────────────────────────────
+  function buildTanks(letters) {
+    Object.values(tankEls).forEach(t => t.el.remove());
+    tankEls = {};
+    letters.forEach(l => {
+      const el = document.createElement('div');
+      el.className = 'tank';
+      el.id = 'tank-' + l;
+      const img = document.createElement('img');
+      img.src = '/svg/' + TANK_NAMES[l] + '.svg';
+      el.appendChild(img);
+      canvas.appendChild(el);
+      tankEls[l] = { el, img, lastState: 'normal' };
+    });
+  }
+
+  // ── Update tank visual state ──────────────────────────────────────────────
+  function getTankSrc(letter, hitFlash, reloading, eliminated) {
+    const base = TANK_NAMES[letter];
+    if (eliminated || hitFlash) return `/svg/${base}_HIT.svg`;
+    if (reloading) return `/svg/${base}RELOAD.svg`;
+    return `/svg/${base}.svg`;
+  }
+
+  // ── WS connection ─────────────────────────────────────────────────────────
+  function connect() {
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(wsProto + '//' + location.host);
+    ws.onopen = () => { if (code) ws.send(JSON.stringify({ type: 'observe', code, role })); };
+    ws.onmessage = (e) => handleMsg(JSON.parse(e.data));
+    ws.onclose = () => {};
+  }
+
+  function handleMsg(msg) {
+
+    if (msg.type === 'countdown_start') {
+      discOverlay.style.display = 'none';
+      winOverlay.style.display  = 'none';
+      cdOverlay.style.display   = 'flex';
+      cdNumber.style.fontSize   = '320px';
+      cdNumber.textContent      = '7';
+    }
+
+    if (msg.type === 'countdown') {
+      cdNumber.textContent = msg.value === 0 ? 'GO!' : msg.value;
+      if (msg.value === 0) cdNumber.style.fontSize = '180px';
+    }
+
+    if (msg.type === 'game_start') {
+      players = msg.playerCount === 2 ? ['A','B'] :
+                msg.playerCount === 3 ? ['A','B','C'] : ['A','B','C','D'];
+      buildScoreboard(players);
+      buildWalls(msg.walls);
+      buildTanks(players);
+      // Clear old bullets
+      Object.values(bulletEls).forEach(el => el.remove());
+      bulletEls = {};
+      setTimeout(() => cdOverlay.style.display = 'none', 700);
+    }
+
+    if (msg.type === 'game_state') {
+      // Update tanks
+      Object.entries(msg.tanks).forEach(([l, t]) => {
+        const te = tankEls[l];
+        if (!te) return;
+        // Position & rotation — origin is center
+        te.el.style.left      = t.x + 'px';
+        te.el.style.top       = t.y + 'px';
+        te.el.style.transform = `rotate(${t.angle}deg)`;
+        te.el.style.transformOrigin = '50% 50%';
+        // Visibility
+        te.el.style.opacity = t.eliminated ? '0.35' : '1';
+        // SVG state
+        const src = getTankSrc(l, t.hitFlash, t.reloading, t.eliminated);
+        if (te.img.src !== location.origin + src) te.img.src = src;
+        // Score
+        const hitsEl = document.getElementById('hits-' + l);
+        if (hitsEl) hitsEl.textContent = t.hits;
+        const fillEl = document.getElementById('fill-' + l);
+        if (fillEl) fillEl.style.width = (t.hits / 10 * 100) + '%';
+      });
+
+      // Update bullets — reconcile with current set
+      const liveBulletIds = new Set(msg.bullets.map(b => b.id));
+      // Play shot sound for each newly appearing bullet
+      msg.bullets.forEach(b => { if (!bulletEls[b.id]) playShot(); });
+
+      // Remove dead bullets
+      Object.keys(bulletEls).forEach(id => {
+        if (!liveBulletIds.has(parseInt(id))) {
+          bulletEls[id].remove();
+          delete bulletEls[id];
+        }
+      });
+
+      // Add / update live bullets
+      msg.bullets.forEach(b => {
+        let el = bulletEls[b.id];
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'bullet';
+          const img = document.createElement('img');
+          img.src = '/svg/' + b.owner + 'BULLET.svg';
+          el.appendChild(img);
+          canvas.appendChild(el);
+          bulletEls[b.id] = el;
+        }
+        el.style.left = b.x + 'px';
+        el.style.top  = b.y + 'px';
+        if (b.wallHit) playWallHit();
+      });
+
+      // Play sound on hits
+      if (msg.hitEvents && msg.hitEvents.length > 0) {
+        msg.hitEvents.forEach(() => playHit());
+      }
+    }
+
+    if (msg.type === 'game_over') {
+      const w = msg.winner;
+      // Hide any other overlays first
+      cdOverlay.style.display  = 'none';
+      discOverlay.style.display = 'none';
+      if (w === 'draw') {
+        winImg.style.display  = 'none';
+        winText.style.display = 'block';
+        winText.textContent   = '🤝 DRAW!';
+        winSub.textContent    = 'Nobody wins this time';
+      } else {
+        winImg.src            = winnerSvgs[w] || '';
+        winImg.style.display  = winnerSvgs[w] ? 'block' : 'none';
+        winText.style.display = winnerSvgs[w] ? 'none' : 'block';
+        if (!winnerSvgs[w]) winText.textContent = '🏆 TANK ' + w + ' WINS!';
+        winSub.textContent    = '';
+      }
+      // Force show — use both display and visibility to ensure nothing hides it
+      winOverlay.style.display = 'flex';
+      winOverlay.style.zIndex  = '50';
+    }
+
+    if (msg.type === 'player_disconnected') {
+      cdOverlay.style.display = 'none';
+      discMsg.textContent = (msg.who || 'A player') + ' disconnected';
+      discOverlay.style.display = 'flex';
+    }
+
+    if (msg.type === 'room_expired') {
+      discMsg.textContent = 'Room closed after 15 min of inactivity';
+      discOverlay.style.display = 'flex';
+    }
+  }
+
+  function restartGame() {
+    winOverlay.style.display = 'none';
+    ws.send(JSON.stringify({ type: 'restart_game' }));
+  }
+
+  function goHome() {
+    ws.close();
+    location.href = '/';
+  }
+
+  connect();
+</script>
+</body>
+</html>
