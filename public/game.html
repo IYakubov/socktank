@@ -294,9 +294,8 @@
   }
 
   // ── Update tank visual state ──────────────────────────────────────────────
-  function getTankSrc(letter, hitFlash, reloading, eliminated) {
+  function getTankSrc(letter, reloading) {
     const base = TANK_NAMES[letter];
-    if (eliminated || hitFlash) return `/svg/${base}_HIT.svg`;
     if (reloading) return `/svg/${base}RELOAD.svg`;
     return `/svg/${base}.svg`;
   }
@@ -350,9 +349,15 @@
         te.el.style.transformOrigin = '50% 50%';
         // Visibility
         te.el.style.opacity = t.eliminated ? '0.35' : '1';
-        // SVG state
-        const src = getTankSrc(l, t.hitFlash, t.reloading, t.eliminated);
+        // SVG state — only swap for reload, use CSS filter for hit flash
+        const src = getTankSrc(l, t.reloading);
         if (te.img.src !== location.origin + src) te.img.src = src;
+        // Hit flash: red tint via CSS filter, no SVG swap needed
+        if (t.hitFlash) {
+          te.img.style.filter = 'brightness(0) saturate(100%) invert(20%) sepia(100%) saturate(700%) hue-rotate(320deg) brightness(1.2)';
+        } else {
+          te.img.style.filter = 'none';
+        }
         // Score
         const hitsEl = document.getElementById('hits-' + l);
         if (hitsEl) hitsEl.textContent = t.hits;
