@@ -84,8 +84,8 @@
       border-radius: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
+      box-shadow: 0 0 6px 2px rgba(255,255,255,0.4);
     }
-    .bullet img { width: 100%; height: 100%; }
 
     /* Countdown overlay */
     #countdown-overlay {
@@ -194,6 +194,7 @@
   const role   = sessionStorage.getItem('role') || 'host';
 
   const TANK_NAMES   = { A: 'ATANK', B: 'BTANK', C: 'CTANK', D: 'DTANK' };
+  const BULLET_COLORS = { A: '#FF8C4E', B: '#5AD2CA', C: '#C062C9', D: '#27E291' };
   const winnerSvgs   = { A: '/svg/playerawinner.svg', B: '/svg/playerbwinner.svg', C: '/svg/playercwinner.svg', D: '/svg/playerdwinner.svg' };
   const TANK_COLORS = { A: '#854646', B: '#103430', C: '#8B4ACF', D: '#2A6B8A' };
   let players = [];        // ['A','B',...] set on game_start
@@ -226,9 +227,7 @@
       if (!el) {
         el = document.createElement('div');
         el.className = 'bullet';
-        const img = document.createElement('img');
-        img.src = '/svg/' + b.owner + 'BULLET.svg';
-        el.appendChild(img);
+        el.style.background = BULLET_COLORS[b.owner] || '#fff';
         canvas.appendChild(el);
         bulletEls[b.id] = el;
       }
@@ -383,6 +382,16 @@
           // Brand new bullet — spawn immediately at server position
           localBullets[b.id] = { id: b.id, owner: b.owner, x: b.x, y: b.y, angle: b.angle || 0 };
           playShot();
+          // Pre-create the DOM element immediately so it shows without waiting for renderLoop
+          if (!bulletEls[b.id]) {
+            const el = document.createElement('div');
+            el.className = 'bullet';
+            el.style.background = BULLET_COLORS[b.owner] || '#fff';
+            el.style.left = b.x + 'px';
+            el.style.top  = b.y + 'px';
+            canvas.appendChild(el);
+            bulletEls[b.id] = el;
+          }
         } else {
           // Correct position to server authoritative value (gentle snap)
           localBullets[b.id].x = b.x;
