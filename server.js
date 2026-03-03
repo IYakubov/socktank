@@ -13,7 +13,11 @@ app.get('/create',   (req, res) => res.sendFile(path.join(__dirname, 'public/cre
 app.get('/join',     (req, res) => res.sendFile(path.join(__dirname, 'public/join.html')));
 app.get('/joystick', (req, res) => res.sendFile(path.join(__dirname, 'public/joystick.html')));
 app.get('/game',     (req, res) => res.sendFile(path.join(__dirname, 'public/game.html')));
-
+// Add this alongside the other app.get() routes:
+app.get('/room-exists', (req, res) => {
+  const { code } = req.query;
+  res.json({ exists: !!(code && rooms[code]) });
+});
 const rooms = {};
 
 // ── Constants ──────────────────────────────────────────────────────────────
