@@ -13,11 +13,11 @@ app.get('/create',   (req, res) => res.sendFile(path.join(__dirname, 'public/cre
 app.get('/join',     (req, res) => res.sendFile(path.join(__dirname, 'public/join.html')));
 app.get('/joystick', (req, res) => res.sendFile(path.join(__dirname, 'public/joystick.html')));
 app.get('/game',     (req, res) => res.sendFile(path.join(__dirname, 'public/game.html')));
-// Add this alongside the other app.get() routes:
 app.get('/room-exists', (req, res) => {
   const { code } = req.query;
   res.json({ exists: !!(code && rooms[code]) });
 });
+
 const rooms = {};
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -25,17 +25,15 @@ const GAME_W    = 1920;
 const GAME_H    = 1080;
 const TANK_W    = 173;
 const TANK_H    = 94;
-const BULLET_R  = 7;   // radius
+const BULLET_R  = 7;
 const TANK_SPEED    = 2;
-const TURN_SPEED    = 1;  // degrees per tick
+const TURN_SPEED    = 1;
 const BULLET_SPEED  = 15;
-const RELOAD_TIME   = 5000; // ms
-const HIT_FLASH     = 400;  // ms
+const RELOAD_TIME   = 5000;
+const HIT_FLASH     = 400;
 const MAX_HITS      = 10;
 const TICK_MS       = 1000 / 60;
 
-// Starting positions & angles for each player slot
-// Pushed well inside so tanks are fully visible
 const SPAWN = {
   A: { x: 120,                     y: 200,                      angle: 45  },
   B: { x: GAME_W - 120 - TANK_W,   y: 200,                      angle: 135 },
@@ -45,30 +43,20 @@ const SPAWN = {
 
 const PLAYER_LETTERS = ['A', 'B', 'C', 'D'];
 
-// ── Cube/obstacle generation ───────────────────────────────────────────────
-// 5 cubes: top-center, bottom-center, left-center, right-center, dead-center
-// Each cube is 120x120px
 const CUBE_SIZE = 120;
 function generateWalls(playerCount) {
   const C = CUBE_SIZE;
   const midX = GAME_W / 2 - C / 2;
   const midY = GAME_H / 2 - C / 2;
-
   return [
-    // Dead center
     { x: midX,             y: midY,              w: C, h: C },
-    // Top center (between A and B)
     { x: midX,             y: 140,               w: C, h: C },
-    // Bottom center (between C and D)
     { x: midX,             y: GAME_H - 140 - C,  w: C, h: C },
-    // Left center (between A and C)
     { x: 140,              y: midY,              w: C, h: C },
-    // Right center (between B and D)
     { x: GAME_W - 140 - C, y: midY,              w: C, h: C },
   ];
 }
 
-// ── Utility ────────────────────────────────────────────────────────────────
 function generateCode() {
   let code;
   do { code = Math.floor(100000 + Math.random() * 900000).toString(); }
@@ -96,12 +84,10 @@ function broadcast(room, msg) {
 
 function toRad(deg) { return deg * Math.PI / 180; }
 
-// ── AABB vs AABB collision ─────────────────────────────────────────────────
 function rectOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
-// Circle vs AABB collision
 function circleRect(cx, cy, r, rx, ry, rw, rh) {
   const nearX = Math.max(rx, Math.min(cx, rx + rw));
   const nearY = Math.max(ry, Math.min(cy, ry + rh));
@@ -109,7 +95,6 @@ function circleRect(cx, cy, r, rx, ry, rw, rh) {
   return dx * dx + dy * dy < r * r;
 }
 
-// ── Inactivity timer ───────────────────────────────────────────────────────
 function startInactivityTimer(room) {
   clearInactivityTimer(room);
   room.inactivityTimer = setTimeout(() => {
@@ -124,19 +109,6 @@ function clearInactivityTimer(room) {
   if (room.inactivityTimer) { clearTimeout(room.inactivityTimer); room.inactivityTimer = null; }
 }
 
-// ── Countdown ─────────────────────────────────────────────────────────────
-function startCountdown(room) {
-  room.state = 'countdown';
-  broadcast(room, { type: 'countdown_start' });
-  let count = 7;
-  broadcast(room, { type: 'countdown', value: count });
-  const iv = setInterval(() => {
-    count--;
-    if (count >= 0) broadcast(room, { type: 'countdown', value: count });
-    if (count < 0) { clearInterval(iv); startGame(room); }
-  }, 1000);
-}
-
 // ── WebSocket handler ──────────────────────────────────────────────────────
 wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
@@ -146,12 +118,12 @@ wss.on('connection', (ws) => {
 
       case 'create_room': {
         const code = generateCode();
-        const { playerCount } = msg; // 2, 3, or 4
+        const { playerCount } = msg;
         rooms[code] = {
           code, hostWs: ws,
           playerCount: playerCount || 2,
-          playerWs: {},      // letter -> ws
-          reserved: {},      // letter -> true
+          playerWs: {},
+          reserved: {},
           hostNavigating: false,
           state: 'waiting',
           gs: null,
@@ -177,16 +149,12 @@ wss.on('connection', (ws) => {
         const room = rooms[code];
         if (!room)                    { send(ws, { type: 'error', message: 'Room not found' }); return; }
         if (room.state !== 'waiting') { send(ws, { type: 'error', message: 'Game already started' }); return; }
-
-        // Find next free slot up to playerCount
         const letters = PLAYER_LETTERS.slice(0, room.playerCount);
         const player = letters.find(l => !room.reserved[l]);
         if (!player) { send(ws, { type: 'error', message: 'Room is full' }); return; }
-
         room.reserved[player] = true;
         ws.roomCode = code; ws.roomRole = `claim_${player}`;
         send(ws, { type: 'slot_claimed', player });
-
         const count = Object.keys(room.reserved).length;
         send(room.hostWs, { type: 'player_joined', count, player, total: room.playerCount });
         break;
@@ -217,7 +185,7 @@ wss.on('connection', (ws) => {
           send(ws, { type: 'error', message: 'Not all players have joined yet' }); return;
         }
         room.hostNavigating = true;
-        startCountdown(room);
+        startGame(room);
         break;
       }
 
@@ -227,7 +195,6 @@ wss.on('connection', (ws) => {
         const letter = ws.roomRole.replace('player', '');
         const tank = room.gs.tanks[letter];
         if (!tank || tank.eliminated) return;
-        // msg.input: { forward, backward, left, right, shoot }
         tank.input = msg.input;
         break;
       }
@@ -237,13 +204,12 @@ wss.on('connection', (ws) => {
         if (!room) return;
         if (room.gameLoop) { clearInterval(room.gameLoop); room.gameLoop = null; }
         clearInactivityTimer(room);
-        // Notify all player joysticks they are revived
         Object.entries(room.playerWs).forEach(([letter, pws]) => {
           if (pws && pws.readyState === WebSocket.OPEN) {
             pws.send(JSON.stringify({ type: 'revived' }));
           }
         });
-        startCountdown(room);
+        startGame(room);
         break;
       }
     }
@@ -286,7 +252,7 @@ function startGame(room) {
     const sp = SPAWN[l];
     tanks[l] = {
       x: sp.x, y: sp.y,
-      angle: sp.angle,   // degrees, 0=right
+      angle: sp.angle,
       hits: 0,
       reloading: false,
       reloadEnd: 0,
@@ -297,7 +263,7 @@ function startGame(room) {
     };
   });
 
-  const bullets = []; // { id, owner, x, y, angle, bounces }
+  const bullets = [];
   let bulletId = 0;
 
   room.gs = { tanks, bullets };
@@ -308,28 +274,23 @@ function startGame(room) {
     const now = Date.now();
     const gs = room.gs;
 
-    // ── Update tanks ──────────────────────────────────────────────────────
     letters.forEach(l => {
       const t = gs.tanks[l];
       if (t.eliminated) return;
 
       const inp = t.input;
 
-      // Turning
       if (inp.left)  t.angle = (t.angle - TURN_SPEED + 360) % 360;
       if (inp.right) t.angle = (t.angle + TURN_SPEED) % 360;
 
-      // Movement
       if (inp.forward || inp.backward) {
         const dir = inp.forward ? 1 : -1;
         const rad = toRad(t.angle);
         const nx = t.x + Math.cos(rad) * TANK_SPEED * dir;
         const ny = t.y + Math.sin(rad) * TANK_SPEED * dir;
 
-        // Boundary clamp using tank CENTER so rotation never causes clipping
-        // Half-diagonal of 173x94 tank = ~99px, use 105px safe radius
         const SAFE = 105;
-        const TOP_SAFE = SAFE + 80; // extra for scoreboard
+        const TOP_SAFE = SAFE + 80;
         const centerNX = nx + TANK_W / 2;
         const centerNY = ny + TANK_H / 2;
         const clampedCX = Math.max(SAFE, Math.min(GAME_W - SAFE, centerNX));
@@ -337,16 +298,12 @@ function startGame(room) {
         const cx = clampedCX - TANK_W / 2;
         const cy = clampedCY - TANK_H / 2;
 
-        // Use a tighter collision body (centered, smaller than full sprite)
-        // so tanks don't get blocked by nearby cubes they aren't really touching
         const BODY_W = 100, BODY_H = 70;
         const bodyOffX = (TANK_W - BODY_W) / 2;
         const bodyOffY = (TANK_H - BODY_H) / 2;
         const bx = cx + bodyOffX, by = cy + bodyOffY;
 
-        // Cube collision
         const wallBlocked = room.walls.some(w => rectOverlap(bx, by, BODY_W, BODY_H, w.x, w.y, w.w, w.h));
-        // Tank-vs-tank body collision
         const tankBlocked = letters.some(other => {
           if (other === l) return false;
           const o = gs.tanks[other];
@@ -357,7 +314,6 @@ function startGame(room) {
         if (!wallBlocked && !tankBlocked) { t.x = cx; t.y = cy; }
       }
 
-      // Shooting
       if (inp.shoot && !t.reloading && !t.shootQueued) {
         t.shootQueued = true;
       }
@@ -365,12 +321,10 @@ function startGame(room) {
         t.shootQueued = false;
         t.reloading = true;
         t.reloadEnd = now + RELOAD_TIME;
-        // Spawn bullet well ahead of barrel tip — enough clearance to never self-hit on spawn
         const rad = toRad(t.angle);
-        const spawnDist = TANK_W / 2 + 30; // 30px clear of tank edge
+        const spawnDist = TANK_W / 2 + 30;
         const bx = t.x + TANK_W / 2 + Math.cos(rad) * spawnDist;
         const by = t.y + TANK_H / 2 + Math.sin(rad) * spawnDist;
-        // immunity: bullet cannot hit its own owner for first 20 frames
         bullets.push({ id: bulletId++, owner: l, x: bx, y: by, angle: t.angle, bounces: 0, frames: 0 });
       }
       if (t.reloading && now >= t.reloadEnd) {
@@ -378,9 +332,8 @@ function startGame(room) {
       }
     });
 
-    // ── Update bullets ────────────────────────────────────────────────────
     const toRemove = new Set();
-    const hits = []; // { tank, bullet }
+    const hits = [];
 
     bullets.forEach(b => {
       if (toRemove.has(b.id)) return;
@@ -388,13 +341,10 @@ function startGame(room) {
       b.x += Math.cos(rad) * BULLET_SPEED;
       b.y += Math.sin(rad) * BULLET_SPEED;
 
-      // Out of bounds
       if (b.x < 0 || b.x > GAME_W || b.y < 0 || b.y > GAME_H) {
         toRemove.add(b.id); return;
       }
 
-      // Cube bounce
-      let wallHit = false;
       for (const w of room.walls) {
         if (circleRect(b.x, b.y, BULLET_R, w.x, w.y, w.w, w.h)) {
           if (b.bounces >= 5) { toRemove.add(b.id); break; }
@@ -414,22 +364,18 @@ function startGame(room) {
           b.x += Math.cos(rad2) * BULLET_SPEED;
           b.y += Math.sin(rad2) * BULLET_SPEED;
           b.wallHit = true;
-          wallHit = true;
           break;
         }
       }
       if (toRemove.has(b.id)) return;
 
-      // Increment bullet frame counter
       b.frames = (b.frames || 0) + 1;
 
-      // Tank hit detection — tight circle check, owner immune for first 20 frames
-      const HIT_RADIUS = 38; // tighter than full bounding box — feels accurate
+      const HIT_RADIUS = 38;
       letters.forEach(l => {
         const t = gs.tanks[l];
         if (t.eliminated) return;
-        if (l === b.owner && b.frames < 20) return; // owner immunity window
-        // Use circle vs circle: distance between bullet center and tank center
+        if (l === b.owner && b.frames < 20) return;
         const tcx = t.x + TANK_W / 2;
         const tcy = t.y + TANK_H / 2;
         const dx = b.x - tcx;
@@ -442,7 +388,6 @@ function startGame(room) {
       });
     });
 
-    // Apply hits
     const hitEvents = [];
     hits.forEach(({ tank, bullet }) => {
       const t = gs.tanks[tank];
@@ -452,7 +397,6 @@ function startGame(room) {
       hitEvents.push({ tank, shooter: bullet.owner, hits: t.hits });
       if (t.hits >= MAX_HITS) {
         t.eliminated = true;
-        // Notify that player's joystick
         const joystickWs = room.playerWs[tank];
         if (joystickWs && joystickWs.readyState === 1) {
           joystickWs.send(JSON.stringify({ type: 'eliminated' }));
@@ -460,20 +404,16 @@ function startGame(room) {
       }
     });
 
-    // Remove spent bullets
     for (let i = bullets.length - 1; i >= 0; i--) {
       if (toRemove.has(bullets[i].id)) bullets.splice(i, 1);
     }
 
-    // Check win condition
     const alive = letters.filter(l => !gs.tanks[l].eliminated);
     let winner = null;
     if (alive.length === 1) winner = alive[0];
     if (alive.length === 0) winner = 'draw';
-    // Edge case: if playerCount is 1 (shouldn't happen but safety)
     if (letters.length === 1 && gs.tanks[letters[0]].eliminated) winner = letters[0];
 
-    // Build state snapshot
     const tankState = {};
     letters.forEach(l => {
       const t = gs.tanks[l];
@@ -493,39 +433,23 @@ function startGame(room) {
       angle: b.angle,
       wallHit: b.wallHit || false,
     }));
-    // Reset wallHit flags after broadcasting
     bullets.forEach(b => { b.wallHit = false; });
 
-    // Send game_over FIRST if there's a winner, so client doesn't get a trailing state update
     if (winner !== null) {
       clearInterval(room.gameLoop); room.gameLoop = null;
       room.state = 'finished';
-      // Still send final state so positions are up to date
-      broadcast(room, {
-        type: 'game_state',
-        tanks: tankState,
-        bullets: bulletState,
-        hitEvents,
-      });
+      broadcast(room, { type: 'game_state', tanks: tankState, bullets: bulletState, hitEvents });
       broadcast(room, { type: 'game_over', winner });
       startInactivityTimer(room);
       return;
     }
 
-    broadcast(room, {
-      type: 'game_state',
-      tanks: tankState,
-      bullets: bulletState,
-      hitEvents,
-    });
+    broadcast(room, { type: 'game_state', tanks: tankState, bullets: bulletState, hitEvents });
 
   }, TICK_MS);
 }
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
-  const ip = getLocalIP();
-  console.log(`\n🎮 SockTank Server Running!`);
-  console.log(`\n   Game screen: http://localhost:${PORT}`);
-  console.log(`   Phones:      http://${ip}:${PORT}/join\n`);
+  console.log(`\n🎮 SockTank running on port ${PORT}\n`);
 });
