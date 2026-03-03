@@ -54,4 +54,3 @@ Phones:      http://192.168.x.x:3001/join
 - Runs on port **3001** (SockPong uses 3000, no conflict)
 - Room codes are unique — no two active rooms share a code
 - Rooms auto-expire after **15 minutes of inactivity**
-# socktank

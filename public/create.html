@@ -103,8 +103,7 @@
       document.getElementById('lobby-screen').style.display = 'flex';
       document.getElementById('player-status').textContent = 'Waiting for players… (0/' + count + ')';
 
-      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(wsProto + '//' + location.host);
+      ws = new WebSocket('ws://' + location.host);
       ws.onopen = function() {
         ws.send(JSON.stringify({ type: 'create_room', playerCount: count }));
       };

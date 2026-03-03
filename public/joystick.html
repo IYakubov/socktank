@@ -139,8 +139,7 @@
     let lastInputStr = '';
 
     function connect() {
-      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(wsProto + '//' + location.host);
+      ws = new WebSocket('ws://' + location.host);
       ws.onopen = () => ws.send(JSON.stringify({ type: 'attach', code, player }));
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
@@ -156,11 +155,6 @@
         if (msg.type === 'eliminated') {
           document.getElementById('eliminated-msg').style.display = 'flex';
           stopSendLoop();
-        }
-        if (msg.type === 'revived') {
-          document.getElementById('eliminated-msg').style.display = 'none';
-          document.getElementById('status').style.opacity = '0';
-          startSendLoop();
         }
         if (msg.type === 'room_expired') {
           document.getElementById('status').style.opacity = '1';

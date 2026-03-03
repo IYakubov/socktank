@@ -35,26 +35,47 @@
       background: rgba(243,239,212,0.85);
       border-bottom: 3px solid #1a1a1a;
     }
-    .score-block { display: flex; align-items: center; gap: 14px; }
-    .score-label { font-size: 22px; font-weight: 700; color: #1a1a1a; }
-    .score-val { font-size: 36px; font-weight: 700; color: #1a1a1a; min-width: 44px; text-align: center; }
-    .score-bar { width: 120px; height: 14px; background: #ccc; border-radius: 7px; overflow: hidden; }
-    .score-fill { height: 100%; border-radius: 7px; transition: width 0.2s; }
+    .score-block {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .score-label {
+      font-size: 22px; font-weight: 700; color: #1a1a1a;
+    }
+    .score-val {
+      font-size: 36px; font-weight: 700; color: #1a1a1a;
+      min-width: 44px; text-align: center;
+    }
+    .score-bar {
+      width: 120px; height: 14px;
+      background: #ccc; border-radius: 7px; overflow: hidden;
+    }
+    .score-fill {
+      height: 100%; border-radius: 7px;
+      transition: width 0.2s;
+    }
+    /* Tank colors for score bars */
     .fill-A { background: #854646; }
     .fill-B { background: #103430; }
     .fill-C { background: #8B4ACF; }
     .fill-D { background: #2A6B8A; }
 
     /* Walls */
-    .wall { position: absolute; background: #1a1a1a; }
+    .wall {
+      position: absolute;
+      background: #1a1a1a;
+    }
 
     /* Tanks */
     .tank {
       position: absolute;
       width: 173px; height: 94px;
       transform-origin: center center;
+      transition: none;
     }
-    .tank img { width: 100%; height: 100%; pointer-events: none; }
+    .tank img {
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
 
     /* Bullets */
     .bullet {
@@ -63,7 +84,18 @@
       border-radius: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
-      box-shadow: 0 0 6px 2px rgba(255,255,255,0.4);
+    }
+    .bullet img { width: 100%; height: 100%; }
+
+    /* Countdown overlay */
+    #countdown-overlay {
+      position: absolute; inset: 0;
+      background: rgba(243,239,212,0.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #countdown-number {
+      font-size: 320px; font-weight: 700; color: #1a1a1a; line-height: 1;
     }
 
     /* Winner overlay */
@@ -74,8 +106,12 @@
       align-items: center; justify-content: center;
       gap: 50px; z-index: 30;
     }
-    #winner-text { font-size: 80px; font-weight: 700; color: #1a1a1a; text-align: center; }
-    #winner-sub  { font-size: 36px; color: #555; text-align: center; }
+    #winner-text {
+      font-size: 80px; font-weight: 700; color: #1a1a1a; text-align: center;
+    }
+    #winner-sub {
+      font-size: 36px; color: #555; text-align: center;
+    }
     .overlay-btns { display: flex; gap: 60px; align-items: center; }
     .svgbtn {
       background: none; border: none; cursor: pointer; padding: 0;
@@ -99,7 +135,15 @@
 <body>
 <div id="canvas">
 
+  <!-- Scoreboard -->
   <div id="scoreboard"></div>
+
+  <!-- Game field (walls + tanks + bullets rendered here by JS) -->
+
+  <!-- Countdown -->
+  <div id="countdown-overlay">
+    <div id="countdown-number">7</div>
+  </div>
 
   <!-- Winner -->
   <div id="winner-overlay">
@@ -134,65 +178,37 @@
   window.addEventListener('resize', scaleCanvas);
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
-  const scoreboard  = document.getElementById('scoreboard');
-  const winOverlay  = document.getElementById('winner-overlay');
-  const winImg      = document.getElementById('winner-img');
-  const winText     = document.getElementById('winner-text');
-  const winSub      = document.getElementById('winner-sub');
-  const discOverlay = document.getElementById('disc-overlay');
-  const discMsg     = document.getElementById('disc-msg');
+  const scoreboard   = document.getElementById('scoreboard');
+  const cdOverlay    = document.getElementById('countdown-overlay');
+  const cdNumber     = document.getElementById('countdown-number');
+  const winOverlay   = document.getElementById('winner-overlay');
+  const winImg       = document.getElementById('winner-img');
+  const winText      = document.getElementById('winner-text');
+  const winSub       = document.getElementById('winner-sub');
+  const discOverlay  = document.getElementById('disc-overlay');
+  const discMsg      = document.getElementById('disc-msg');
 
   // ── State ─────────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
   const code   = params.get('code') || sessionStorage.getItem('code');
   const role   = sessionStorage.getItem('role') || 'host';
 
-  const TANK_NAMES    = { A: 'ATANK', B: 'BTANK', C: 'CTANK', D: 'DTANK' };
-  const BULLET_COLORS = { A: '#FF8C4E', B: '#5AD2CA', C: '#C062C9', D: '#27E291' };
-  const winnerSvgs    = { A: '/svg/playerawinner.svg', B: '/svg/playerbwinner.svg', C: '/svg/playercwinner.svg', D: '/svg/playerdwinner.svg' };
-  let players   = [];
-  let tankEls   = {};
-  let bulletEls = {};
-  let wallEls   = [];
+  const TANK_NAMES   = { A: 'ATANK', B: 'BTANK', C: 'CTANK', D: 'DTANK' };
+  const winnerSvgs   = { A: '/svg/playerawinner.svg', B: '/svg/playerbwinner.svg', C: '/svg/playercwinner.svg', D: '/svg/playerdwinner.svg' };
+  const TANK_COLORS = { A: '#854646', B: '#103430', C: '#8B4ACF', D: '#2A6B8A' };
+  let players = [];        // ['A','B',...] set on game_start
+  let tankEls  = {};       // letter -> { el, img }
+  let bulletEls = {};      // id -> el
+  let wallEls  = [];
   let ws;
-
-  // ── Client-side bullet prediction ─────────────────────────────────────────
-  const BULLET_SPEED = 20;
-  const toRad = deg => deg * Math.PI / 180;
-  let localBullets = {};
-  let lastRenderTime = 0;
-
-  function renderLoop(now) {
-    requestAnimationFrame(renderLoop);
-    const dt = Math.min((now - lastRenderTime) / (1000 / 60), 4);
-    lastRenderTime = now;
-
-    Object.values(localBullets).forEach(b => {
-      const rad = toRad(b.angle);
-      b.x += Math.cos(rad) * BULLET_SPEED * dt;
-      b.y += Math.sin(rad) * BULLET_SPEED * dt;
-
-      let el = bulletEls[b.id];
-      if (!el) {
-        el = document.createElement('div');
-        el.className = 'bullet';
-        el.style.background = BULLET_COLORS[b.owner] || '#fff';
-        canvas.appendChild(el);
-        bulletEls[b.id] = el;
-      }
-      el.style.left = Math.round(b.x) + 'px';
-      el.style.top  = Math.round(b.y) + 'px';
-    });
-  }
-  requestAnimationFrame(t => { lastRenderTime = t; requestAnimationFrame(renderLoop); });
 
   // Sound pools
   const hitPool     = Array.from({length: 6}, () => new Audio('/hit.wav'));
   const shotPool    = Array.from({length: 6}, () => new Audio('/shot.wav'));
   const wallHitPool = Array.from({length: 6}, () => new Audio('/wallhit.wav'));
   let hitIdx = 0, shotIdx = 0, wallHitIdx = 0;
-  function playHit()     { const s = hitPool[hitIdx++ % hitPool.length];             s.currentTime = 0; s.play().catch(() => {}); }
-  function playShot()    { const s = shotPool[shotIdx++ % shotPool.length];           s.currentTime = 0; s.play().catch(() => {}); }
+  function playHit()     { const s = hitPool[hitIdx++ % hitPool.length];         s.currentTime = 0; s.play().catch(() => {}); }
+  function playShot()    { const s = shotPool[shotIdx++ % shotPool.length];       s.currentTime = 0; s.play().catch(() => {}); }
   function playWallHit() { const s = wallHitPool[wallHitIdx++ % wallHitPool.length]; s.currentTime = 0; s.play().catch(() => {}); }
 
   // ── Build scoreboard ──────────────────────────────────────────────────────
@@ -241,16 +257,17 @@
     });
   }
 
-  function getTankSrc(letter, reloading) {
+  // ── Update tank visual state ──────────────────────────────────────────────
+  function getTankSrc(letter, hitFlash, reloading, eliminated) {
     const base = TANK_NAMES[letter];
+    if (eliminated || hitFlash) return `/svg/${base}_HIT.svg`;
     if (reloading) return `/svg/${base}RELOAD.svg`;
     return `/svg/${base}.svg`;
   }
 
   // ── WS connection ─────────────────────────────────────────────────────────
   function connect() {
-    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(wsProto + '//' + location.host);
+    ws = new WebSocket('ws://' + location.host);
     ws.onopen = () => { if (code) ws.send(JSON.stringify({ type: 'observe', code, role })); };
     ws.onmessage = (e) => handleMsg(JSON.parse(e.data));
     ws.onclose = () => {};
@@ -258,71 +275,84 @@
 
   function handleMsg(msg) {
 
+    if (msg.type === 'countdown_start') {
+      discOverlay.style.display = 'none';
+      winOverlay.style.display  = 'none';
+      cdOverlay.style.display   = 'flex';
+      cdNumber.style.fontSize   = '320px';
+      cdNumber.textContent      = '7';
+    }
+
+    if (msg.type === 'countdown') {
+      cdNumber.textContent = msg.value === 0 ? 'GO!' : msg.value;
+      if (msg.value === 0) cdNumber.style.fontSize = '180px';
+    }
+
     if (msg.type === 'game_start') {
       players = msg.playerCount === 2 ? ['A','B'] :
                 msg.playerCount === 3 ? ['A','B','C'] : ['A','B','C','D'];
       buildScoreboard(players);
       buildWalls(msg.walls);
       buildTanks(players);
+      // Clear old bullets
       Object.values(bulletEls).forEach(el => el.remove());
       bulletEls = {};
-      localBullets = {};
-      winOverlay.style.display  = 'none';
-      discOverlay.style.display = 'none';
+      setTimeout(() => cdOverlay.style.display = 'none', 700);
     }
 
     if (msg.type === 'game_state') {
+      // Update tanks
       Object.entries(msg.tanks).forEach(([l, t]) => {
         const te = tankEls[l];
         if (!te) return;
-        te.el.style.left          = t.x + 'px';
-        te.el.style.top           = t.y + 'px';
-        te.el.style.transform     = `rotate(${t.angle}deg)`;
+        // Position & rotation — origin is center
+        te.el.style.left      = t.x + 'px';
+        te.el.style.top       = t.y + 'px';
+        te.el.style.transform = `rotate(${t.angle}deg)`;
         te.el.style.transformOrigin = '50% 50%';
-        te.el.style.opacity       = t.eliminated ? '0.35' : '1';
-        const src = getTankSrc(l, t.reloading);
+        // Visibility
+        te.el.style.opacity = t.eliminated ? '0.35' : '1';
+        // SVG state
+        const src = getTankSrc(l, t.hitFlash, t.reloading, t.eliminated);
         if (te.img.src !== location.origin + src) te.img.src = src;
-        if (t.hitFlash) {
-          te.img.style.filter = 'brightness(0) saturate(100%) invert(20%) sepia(100%) saturate(700%) hue-rotate(320deg) brightness(1.2)';
-        } else {
-          te.img.style.filter = 'none';
-        }
+        // Score
         const hitsEl = document.getElementById('hits-' + l);
         if (hitsEl) hitsEl.textContent = t.hits;
         const fillEl = document.getElementById('fill-' + l);
         if (fillEl) fillEl.style.width = (t.hits / 10 * 100) + '%';
       });
 
+      // Update bullets — reconcile with current set
       const liveBulletIds = new Set(msg.bullets.map(b => b.id));
-      Object.keys(localBullets).forEach(id => {
+      // Play shot sound for each newly appearing bullet
+      msg.bullets.forEach(b => { if (!bulletEls[b.id]) playShot(); });
+
+      // Remove dead bullets
+      Object.keys(bulletEls).forEach(id => {
         if (!liveBulletIds.has(parseInt(id))) {
-          delete localBullets[id];
-          if (bulletEls[id]) { bulletEls[id].remove(); delete bulletEls[id]; }
+          bulletEls[id].remove();
+          delete bulletEls[id];
         }
       });
 
+      // Add / update live bullets
       msg.bullets.forEach(b => {
-        const isNew = !localBullets[b.id];
-        if (isNew) {
-          localBullets[b.id] = { id: b.id, owner: b.owner, x: b.x, y: b.y, angle: b.angle || 0 };
-          playShot();
-          if (!bulletEls[b.id]) {
-            const el = document.createElement('div');
-            el.className = 'bullet';
-            el.style.background = BULLET_COLORS[b.owner] || '#fff';
-            el.style.left = b.x + 'px';
-            el.style.top  = b.y + 'px';
-            canvas.appendChild(el);
-            bulletEls[b.id] = el;
-          }
-        } else {
-          localBullets[b.id].x = b.x;
-          localBullets[b.id].y = b.y;
-          if (b.angle !== undefined) localBullets[b.id].angle = b.angle;
+        let el = bulletEls[b.id];
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'bullet';
+          const img = document.createElement('img');
+          img.src = '/svg/' + b.owner + 'BULLET.svg';
+          el.appendChild(img);
+          canvas.appendChild(el);
+          bulletEls[b.id] = el;
         }
+        el.style.left = b.x + 'px';
+        el.style.top  = b.y + 'px';
         if (b.wallHit) playWallHit();
       });
 
+      // Play sound on hits
       if (msg.hitEvents && msg.hitEvents.length > 0) {
         msg.hitEvents.forEach(() => playHit());
       }
@@ -330,6 +360,8 @@
 
     if (msg.type === 'game_over') {
       const w = msg.winner;
+      // Hide any other overlays first
+      cdOverlay.style.display  = 'none';
       discOverlay.style.display = 'none';
       if (w === 'draw') {
         winImg.style.display  = 'none';
@@ -343,11 +375,13 @@
         if (!winnerSvgs[w]) winText.textContent = '🏆 TANK ' + w + ' WINS!';
         winSub.textContent    = '';
       }
+      // Force show — use both display and visibility to ensure nothing hides it
       winOverlay.style.display = 'flex';
       winOverlay.style.zIndex  = '50';
     }
 
     if (msg.type === 'player_disconnected') {
+      cdOverlay.style.display = 'none';
       discMsg.textContent = (msg.who || 'A player') + ' disconnected';
       discOverlay.style.display = 'flex';
     }
